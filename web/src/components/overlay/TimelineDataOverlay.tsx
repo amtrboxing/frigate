@@ -1,3 +1,4 @@
+import { Timeline } from "@/types/timeline";
 import { useState } from "react";
 
 type TimelineEventOverlayProps = {
@@ -14,19 +15,6 @@ export default function TimelineEventOverlay({
   timeline,
   cameraConfig,
 }: TimelineEventOverlayProps) {
-  if (!timeline.data.box) {
-    return null;
-  }
-
-  const boxLeftEdge = Math.round(timeline.data.box[0] * 100);
-  const boxTopEdge = Math.round(timeline.data.box[1] * 100);
-  const boxRightEdge = Math.round(
-    (1 - timeline.data.box[2] - timeline.data.box[0]) * 100
-  );
-  const boxBottomEdge = Math.round(
-    (1 - timeline.data.box[3] - timeline.data.box[1]) * 100
-  );
-
   const [isHovering, setIsHovering] = useState<boolean>(false);
   const getHoverStyle = () => {
     if (!timeline.data.box) {
@@ -66,6 +54,19 @@ export default function TimelineEventOverlay({
     const height = timeline.data.box[3] * cameraConfig.detect.height;
     return Math.round(100 * (width / height)) / 100;
   };
+
+  if (!timeline.data.box) {
+    return null;
+  }
+
+  const boxLeftEdge = Math.round(timeline.data.box[0] * 100);
+  const boxTopEdge = Math.round(timeline.data.box[1] * 100);
+  const boxRightEdge = Math.round(
+    (1 - timeline.data.box[2] - timeline.data.box[0]) * 100,
+  );
+  const boxBottomEdge = Math.round(
+    (1 - timeline.data.box[3] - timeline.data.box[1]) * 100,
+  );
 
   return (
     <>

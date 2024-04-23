@@ -2,7 +2,8 @@
 
 import logging
 import multiprocessing as mp
-import queue
+import os
+import shutil
 import signal
 import threading
 from typing import Optional
@@ -16,12 +17,13 @@ from ws4py.server.wsgirefserver import (
 )
 from ws4py.server.wsgiutils import WebSocketWSGIApplication
 
+from frigate.comms.detections_updater import DetectionSubscriber, DetectionTypeEnum
 from frigate.comms.ws import WebSocket
 from frigate.config import FrigateConfig
+from frigate.const import CACHE_DIR, CLIPS_DIR
 from frigate.output.birdseye import Birdseye
 from frigate.output.camera import JsmpegCamera
 from frigate.output.preview import PreviewRecorder
-from frigate.types import CameraMetricsTypes
 from frigate.util.image import SharedMemoryFrameManager
 
 logger = logging.getLogger(__name__)
@@ -29,9 +31,6 @@ logger = logging.getLogger(__name__)
 
 def output_frames(
     config: FrigateConfig,
-    video_output_queue: mp.Queue,
-    inter_process_queue: mp.Queue,
-    camera_metrics: dict[str, CameraMetricsTypes],
 ):
     threading.current_thread().name = "output"
     setproctitle("frigate.output")
@@ -59,35 +58,39 @@ def output_frames(
     websocket_server.initialize_websockets_manager()
     websocket_thread = threading.Thread(target=websocket_server.serve_forever)
 
+    detection_subscriber = DetectionSubscriber(DetectionTypeEnum.video)
+
     jsmpeg_cameras: dict[str, JsmpegCamera] = {}
     birdseye: Optional[Birdseye] = None
     preview_recorders: dict[str, PreviewRecorder] = {}
+
+    move_preview_frames("cache")
 
     for camera, cam_config in config.cameras.items():
         if not cam_config.enabled:
             continue
 
         jsmpeg_cameras[camera] = JsmpegCamera(cam_config, stop_event, websocket_server)
-        preview_recorders[camera] = PreviewRecorder(cam_config, inter_process_queue)
+        preview_recorders[camera] = PreviewRecorder(cam_config)
 
     if config.birdseye.enabled:
-        birdseye = Birdseye(
-            config, frame_manager, camera_metrics, stop_event, websocket_server
-        )
+        birdseye = Birdseye(config, frame_manager, stop_event, websocket_server)
 
     websocket_thread.start()
 
     while not stop_event.is_set():
-        try:
-            (
-                camera,
-                frame_time,
-                current_tracked_objects,
-                motion_boxes,
-                regions,
-            ) = video_output_queue.get(True, 1)
-        except queue.Empty:
+        (topic, data) = detection_subscriber.get_data(timeout=1)
+
+        if not topic:
             continue
+
+        (
+            camera,
+            frame_time,
+            current_tracked_objects,
+            motion_boxes,
+            regions,
+        ) = data
 
         frame_id = f"{camera}{frame_time}"
 
@@ -127,18 +130,27 @@ def output_frames(
 
         previous_frames[camera] = frame_time
 
-    while not video_output_queue.empty():
+    move_preview_frames("clips")
+
+    while True:
+        (topic, data) = detection_subscriber.get_data(timeout=0)
+
+        if not topic:
+            break
+
         (
             camera,
             frame_time,
             current_tracked_objects,
             motion_boxes,
             regions,
-        ) = video_output_queue.get(True, 10)
+        ) = data
 
         frame_id = f"{camera}{frame_time}"
         frame = frame_manager.get(frame_id, config.cameras[camera].frame_shape_yuv)
         frame_manager.delete(frame_id)
+
+    detection_subscriber.stop()
 
     for jsmpeg in jsmpeg_cameras.values():
         jsmpeg.stop()
@@ -155,3 +167,16 @@ def output_frames(
     websocket_server.shutdown()
     websocket_thread.join()
     logger.info("exiting output process...")
+
+
+def move_preview_frames(loc: str):
+    preview_holdover = os.path.join(CLIPS_DIR, "preview_restart_cache")
+    preview_cache = os.path.join(CACHE_DIR, "preview_frames")
+
+    if loc == "clips":
+        shutil.move(preview_cache, preview_holdover)
+    elif loc == "cache":
+        if not os.path.exists(preview_holdover):
+            return
+
+        shutil.move(preview_holdover, preview_cache)

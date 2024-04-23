@@ -4,21 +4,26 @@ import { configureMonacoYaml } from "monaco-yaml";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApiHost } from "@/api";
 import Heading from "@/components/ui/heading";
-import ActivityIndicator from "@/components/ui/activity-indicator";
+import ActivityIndicator from "@/components/indicators/activity-indicator";
 import { Button } from "@/components/ui/button";
 import axios from "axios";
 import copy from "copy-to-clipboard";
 import { useTheme } from "@/context/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
+import { toast } from "sonner";
 
 type SaveOptions = "saveonly" | "restart";
 
 function ConfigEditor() {
   const apiHost = useApiHost();
 
+  useEffect(() => {
+    document.title = "Config Editor - Frigate";
+  }, []);
+
   const { data: config } = useSWR<string>("config/raw");
 
-  const { theme } = useTheme();
-  const [success, setSuccess] = useState<string | undefined>();
+  const { theme, systemTheme } = useTheme();
   const [error, setError] = useState<string | undefined>();
 
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -37,16 +42,16 @@ function ConfigEditor() {
           editorRef.current.getValue(),
           {
             headers: { "Content-Type": "text/plain" },
-          }
+          },
         )
         .then((response) => {
           if (response.status === 200) {
             setError("");
-            setSuccess(response.data.message);
+            toast.success(response.data.message, { position: "top-center" });
           }
         })
         .catch((error) => {
-          setSuccess("");
+          toast.error("Error saving config", { position: "top-center" });
 
           if (error.response) {
             setError(error.response.data.message);
@@ -55,7 +60,7 @@ function ConfigEditor() {
           }
         });
     },
-    [editorRef]
+    [editorRef],
   );
 
   const handleCopyConfig = useCallback(async () => {
@@ -106,7 +111,7 @@ function ConfigEditor() {
         language: "yaml",
         model: modelRef.current,
         scrollBeyondLastLine: false,
-        theme: theme == "dark" ? "vs-dark" : "vs-light",
+        theme: (systemTheme || theme) == "dark" ? "vs-dark" : "vs-light",
       });
     }
 
@@ -122,35 +127,30 @@ function ConfigEditor() {
   }
 
   return (
-    <div className="absolute top-28 bottom-16 right-0 left-0 md:left-24 lg:left-60">
+    <div className="absolute top-2 bottom-16 right-0 left-0 md:left-2">
       <div className="lg:flex justify-between mr-1">
         <Heading as="h2">Config</Heading>
         <div>
-          <Button
-            size="sm"
-            className="mx-1"
-            onClick={(_) => handleCopyConfig()}
-          >
+          <Button size="sm" className="mx-1" onClick={() => handleCopyConfig()}>
             Copy Config
           </Button>
           <Button
             size="sm"
             className="mx-1"
-            onClick={(_) => onHandleSaveConfig("restart")}
+            onClick={() => onHandleSaveConfig("restart")}
           >
             Save & Restart
           </Button>
           <Button
             size="sm"
             className="mx-1"
-            onClick={(_) => onHandleSaveConfig("saveonly")}
+            onClick={() => onHandleSaveConfig("saveonly")}
           >
             Save Only
           </Button>
         </div>
       </div>
 
-      {success && <div className="max-h-20 text-success">{success}</div>}
       {error && (
         <div className="p-4 overflow-scroll text-danger whitespace-pre-wrap">
           {error}
@@ -158,6 +158,7 @@ function ConfigEditor() {
       )}
 
       <div ref={configRef} className="h-full mt-2" />
+      <Toaster />
     </div>
   );
 }

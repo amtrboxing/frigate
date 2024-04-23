@@ -40,14 +40,15 @@ The USB version is compatible with the widest variety of hardware and does not r
 
 The PCIe and M.2 versions require installation of a driver on the host. Follow the instructions for your version from https://coral.ai
 
-A single Coral can handle many cameras and will be sufficient for the majority of users. You can calculate the maximum performance of your Coral based on the inference speed reported by Frigate. With an inference speed of 10, your Coral will top out at `1000/10=100`, or 100 frames per second. If your detection fps is regularly getting close to that, you should first consider tuning motion masks. If those are already properly configured, a second Coral may be needed.
+A single Coral can handle many cameras using the default model and will be sufficient for the majority of users. You can calculate the maximum performance of your Coral based on the inference speed reported by Frigate. With an inference speed of 10, your Coral will top out at `1000/10=100`, or 100 frames per second. If your detection fps is regularly getting close to that, you should first consider tuning motion masks. If those are already properly configured, a second Coral may be needed.
 
-### OpenVino
+### OpenVINO
 
 The OpenVINO detector type is able to run on:
 
 - 6th Gen Intel Platforms and newer that have an iGPU
 - x86 & Arm64 hosts with VPU Hardware (ex: Intel NCS2)
+- Most modern AMD CPUs (though this is officially not supported by Intel)
 
 More information is available [in the detector docs](/configuration/object_detectors#openvino-detector)
 
@@ -93,17 +94,6 @@ Inference speeds will vary greatly depending on the GPU and the model used.
 Frigate supports all Jetson boards, from the inexpensive Jetson Nano to the powerful Jetson Orin AGX. It will [make use of the Jetson's hardware media engine](/configuration/hardware_acceleration#nvidia-jetson-orin-agx-orin-nx-orin-nano-xavier-agx-xavier-nx-tx2-tx1-nano) when configured with the [appropriate presets](/configuration/ffmpeg_presets#hwaccel-presets), and will make use of the Jetson's GPU and DLA for object detection when configured with the [TensorRT detector](/configuration/object_detectors#nvidia-tensorrt-detector).
 
 Inference speed will vary depending on the YOLO model, jetson platform and jetson nvpmodel (GPU/DLA/EMC clock speed). It is typically 20-40 ms for most models. The DLA is more efficient than the GPU, but not faster, so using the DLA will reduce power consumption but will slightly increase inference time.
-
-#### Rockchip SoC
-
-Frigate supports SBCs with the following Rockchip SoCs:
-
-- RK3566/RK3568
-- RK3588/RK3588S
-- RV1103/RV1106
-- RK3562
-
-Using the yolov8n model and an Orange Pi 5 Plus with RK3588 SoC inference speeds vary between 20 - 25 ms.
 
 ## What does Frigate use the CPU for and what does it use a detector for? (ELI5 Version)
 

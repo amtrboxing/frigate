@@ -3,9 +3,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type MSEPlayerProps = {
   camera: string;
+  className?: string;
+  playbackEnabled?: boolean;
+  audioEnabled?: boolean;
+  pip?: boolean;
+  onPlaying?: () => void;
 };
 
-function MSEPlayer({ camera }: MSEPlayerProps) {
+function MSEPlayer({
+  camera,
+  className,
+  playbackEnabled = true,
+  audioEnabled = false,
+  pip = false,
+  onPlaying,
+}: MSEPlayerProps) {
   let connectTS: number = 0;
 
   const RECONNECT_TIMEOUT: number = 30000;
@@ -21,27 +33,28 @@ function MSEPlayer({ camera }: MSEPlayerProps) {
     "opus", // OPUS Chrome, Firefox
   ];
 
-  const visibilityThreshold: number = 0;
-  const visibilityCheck: boolean = true;
+  const visibilityCheck: boolean = !pip;
 
   const [wsState, setWsState] = useState<number>(WebSocket.CLOSED);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTIDRef = useRef<number | null>(null);
-  const ondataRef = useRef<((data: any) => void) | null>(null);
-  const onmessageRef = useRef<{ [key: string]: (msg: any) => void }>({});
+  const ondataRef = useRef<((data: ArrayBufferLike) => void) | null>(null);
+  const onmessageRef = useRef<{
+    [key: string]: (msg: { value: string; type: string }) => void;
+  }>({});
   const msRef = useRef<MediaSource | null>(null);
 
   const wsURL = useMemo(() => {
-    return `${baseUrl.replace(/^http/, "ws")}live/webrtc/api/ws?src=${camera}`;
+    return `${baseUrl.replace(/^http/, "ws")}live/mse/api/ws?src=${camera}`;
   }, [camera]);
 
   const play = () => {
     const currentVideo = videoRef.current;
 
     if (currentVideo) {
-      currentVideo.play().catch((er: any) => {
+      currentVideo.play().catch((er: { name: string }) => {
         if (er.name === "NotAllowedError" && !currentVideo.muted) {
           currentVideo.muted = true;
           currentVideo.play().catch(() => {});
@@ -51,16 +64,19 @@ function MSEPlayer({ camera }: MSEPlayerProps) {
   };
 
   const send = useCallback(
-    (value: any) => {
+    (value: object) => {
       if (wsRef.current) wsRef.current.send(JSON.stringify(value));
     },
-    [wsRef]
+    [wsRef],
   );
 
   const codecs = useCallback((isSupported: (type: string) => boolean) => {
     return CODECS.filter((codec) =>
-      isSupported(`video/mp4; codecs="${codec}"`)
+      isSupported(`video/mp4; codecs="${codec}"`),
     ).join();
+
+    // we know that these deps are correct
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onConnect = useCallback(() => {
@@ -68,6 +84,8 @@ function MSEPlayer({ camera }: MSEPlayerProps) {
 
     setWsState(WebSocket.CONNECTING);
 
+    // TODO may need to check this later
+    // eslint-disable-next-line
     connectTS = Date.now();
 
     wsRef.current = new WebSocket(wsURL);
@@ -102,6 +120,8 @@ function MSEPlayer({ camera }: MSEPlayerProps) {
     onmessageRef.current = {};
 
     onMse();
+    // only run once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onClose = useCallback(() => {
@@ -127,11 +147,11 @@ function MSEPlayer({ camera }: MSEPlayerProps) {
         () => {
           send({
             type: "mse",
-            // @ts-ignore
+            // @ts-expect-error for typing
             value: codecs(MediaSource.isTypeSupported),
           });
         },
-        { once: true }
+        { once: true },
       );
 
       if (videoRef.current) {
@@ -148,7 +168,7 @@ function MSEPlayer({ camera }: MSEPlayerProps) {
             value: codecs(MediaSource.isTypeSupported),
           });
         },
-        { once: true }
+        { once: true },
       );
       videoRef.current!.src = URL.createObjectURL(msRef.current!);
       videoRef.current!.srcObject = null;
@@ -176,6 +196,7 @@ function MSEPlayer({ camera }: MSEPlayerProps) {
             }
           }
         } catch (e) {
+          // eslint-disable-next-line no-console
           console.debug(e);
         }
       });
@@ -193,6 +214,7 @@ function MSEPlayer({ camera }: MSEPlayerProps) {
           try {
             sb?.appendBuffer(data);
           } catch (e) {
+            // eslint-disable-next-line no-console
             console.debug(e);
           }
         }
@@ -201,56 +223,70 @@ function MSEPlayer({ camera }: MSEPlayerProps) {
   };
 
   useEffect(() => {
+    if (!playbackEnabled) {
+      return;
+    }
+
     // iOS 17.1+ uses ManagedMediaSource
     const MediaSourceConstructor =
       "ManagedMediaSource" in window ? window.ManagedMediaSource : MediaSource;
 
-    // @ts-ignore
+    // @ts-expect-error for typing
     msRef.current = new MediaSourceConstructor();
 
-    if ("hidden" in document && visibilityCheck) {
-      document.addEventListener("visibilitychange", () => {
-        if (document.hidden) {
-          onDisconnect();
-        } else if (videoRef.current?.isConnected) {
-          onConnect();
-        }
-      });
-    }
-
-    if ("IntersectionObserver" in window && visibilityThreshold) {
-      const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (!entry.isIntersecting) {
-              onDisconnect();
-            } else if (videoRef.current?.isConnected) {
-              onConnect();
-            }
-          });
-        },
-        { threshold: visibilityThreshold }
-      );
-      observer.observe(videoRef.current!);
-    }
+    onConnect();
 
     return () => {
       onDisconnect();
     };
-  }, [onDisconnect, onConnect]);
+    // we know that these deps are correct
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playbackEnabled, onDisconnect, onConnect]);
+
+  // check visibility
 
   useEffect(() => {
-    onConnect();
-  }, [wsURL]);
+    if (!playbackEnabled || !visibilityCheck) {
+      return;
+    }
+
+    if (!("hidden" in document)) {
+      return;
+    }
+
+    const listener = () => {
+      if (document.hidden) {
+        onDisconnect();
+      } else if (videoRef.current?.isConnected) {
+        onConnect();
+      }
+    };
+
+    document.addEventListener("visibilitychange", listener);
+
+    return () => {
+      document.removeEventListener("visibilitychange", listener);
+    };
+  }, [playbackEnabled, visibilityCheck, onConnect, onDisconnect]);
+
+  // control pip
+
+  useEffect(() => {
+    if (!videoRef.current || !pip) {
+      return;
+    }
+
+    videoRef.current.requestPictureInPicture();
+  }, [pip, videoRef]);
 
   return (
     <video
       ref={videoRef}
-      controls
+      className={className}
       playsInline
       preload="auto"
-      muted
-      style={{ display: "block", width: "100%", height: "100%" }}
+      onLoadedData={onPlaying}
+      muted={!audioEnabled}
     />
   );
 }

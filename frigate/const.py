@@ -26,6 +26,10 @@ LABEL_CONSOLIDATION_MAP = {
     "face": 0.5,
 }
 LABEL_CONSOLIDATION_DEFAULT = 0.9
+LABEL_NMS_MAP = {
+    "car": 0.6,
+}
+LABEL_NMS_DEFAULT = 0.4
 
 # Audio Consts
 
@@ -34,6 +38,10 @@ AUDIO_FORMAT = "s16le"
 AUDIO_MAX_BIT_RANGE = 32768.0
 AUDIO_SAMPLE_RATE = 16000
 AUDIO_MIN_CONFIDENCE = 0.5
+
+# DB Consts
+
+MAX_WAL_SIZE = 10  # MB
 
 # Ffmpeg Presets
 
@@ -53,6 +61,10 @@ DRIVER_AMD = "radeonsi"
 DRIVER_INTEL_i965 = "i965"
 DRIVER_INTEL_iHD = "iHD"
 
+# Preview Values
+
+PREVIEW_FRAME_TYPE = "webp"
+
 # Record Values
 
 CACHE_SEGMENT_FORMAT = "%Y%m%d%H%M%S%z"
@@ -66,6 +78,7 @@ MAX_PLAYLIST_SECONDS = 7200  # support 2 hour segments for a single playlist to 
 INSERT_MANY_RECORDINGS = "insert_many_recordings"
 INSERT_PREVIEW = "insert_preview"
 REQUEST_REGION_GRID = "request_region_grid"
+UPSERT_REVIEW_SEGMENT = "upsert_review_segment"
 
 # Autotracking
 
