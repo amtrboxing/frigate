@@ -5,7 +5,7 @@ title: Full Reference Config
 
 ### Full configuration reference:
 
-:::caution
+:::warning
 
 It is not recommended to copy this full configuration file. Only specify values that are different from the defaults. Configuration options and default values may change in future versions.
 
@@ -80,7 +80,7 @@ model:
   # Valid values are nhwc or nchw (default: shown below)
   input_tensor: nhwc
   # Optional: Object detection model type, currently only used with the OpenVINO detector
-  # Valid values are ssd, yolox, yolov5, or yolov8 (default: shown below)
+  # Valid values are ssd, yolox (default: shown below)
   model_type: ssd
   # Optional: Label name modifications. These are merged into the standard labelmap.
   labelmap:
@@ -145,6 +145,14 @@ birdseye:
   #   motion - cameras are included if motion was detected in the last 30 seconds
   #   continuous - all cameras are included always
   mode: objects
+  # Optional: Threshold for camera activity to stop showing camera (default: shown below)
+  inactivity_threshold: 30
+  # Optional: Configure the birdseye layout
+  layout:
+    # Optional: Scaling factor for the layout calculator (default: shown below)
+    scaling_factor: 2.0
+    # Optional: Maximum number of cameras to show at one time, showing the most recent (default: show all cameras)
+    max_cameras: 1
 
 # Optional: ffmpeg configuration
 # More information about presets at https://docs.frigate.video/configuration/ffmpeg_presets
@@ -249,6 +257,28 @@ objects:
       # Checks based on the bottom center of the bounding box of the object
       mask: 0,0,1000,0,1000,200,0,200
 
+# Optional: Review configuration
+# NOTE: Can be overridden at the camera level
+review:
+  # Optional: alerts configuration
+  alerts:
+    # Optional: labels that qualify as an alert (default: shown below)
+    labels:
+      - car
+      - person
+    # Optional: required zones for an object to be marked as an alert (default: none)
+    required_zones:
+      - driveway
+  # Optional: detections configuration
+  detections:
+    # Optional: labels that qualify as a detection (default: all labels that are tracked / listened to)
+    labels:
+      - car
+      - person
+    # Optional: required zones for an object to be marked as a detection (default: none)
+    required_zones:
+      - driveway
+
 # Optional: Motion configuration
 # NOTE: Can be overridden at the camera level
 motion:
@@ -337,8 +367,6 @@ record:
     # Optional: Objects to save recordings for. (default: all tracked objects)
     objects:
       - person
-    # Optional: Restrict recordings to objects that entered any of the listed zones (default: no required zones)
-    required_zones: []
     # Optional: Retention settings for recordings of events
     retain:
       # Required: Default retention days (default: shown below)
@@ -480,6 +508,8 @@ cameras:
         coordinates: 545,1077,747,939,788,805
         # Optional: Number of consecutive frames required for object to be considered present in the zone (default: shown below).
         inertia: 3
+        # Optional: Number of seconds that an object must loiter to be considered in the zone (default: shown below)
+        loitering_time: 0
         # Optional: List of objects that can trigger this zone (default: all tracked objects)
         objects:
           - person
@@ -577,8 +607,6 @@ ui:
   live_mode: mse
   # Optional: Set a timezone to use in the UI (default: use browser local time)
   # timezone: America/Denver
-  # Optional: Use an experimental recordings / camera view UI (default: shown below)
-  use_experimental: False
   # Optional: Set the time format used.
   # Options are browser, 12hour, or 24hour (default: shown below)
   time_format: browser

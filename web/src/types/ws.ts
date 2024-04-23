@@ -1,3 +1,5 @@
+import { ReviewSegment } from "./review";
+
 type FrigateObjectState = {
   id: string;
   camera: string;
@@ -27,8 +29,16 @@ type FrigateObjectState = {
   };
 };
 
+export interface FrigateReview {
+  type: "new" | "update" | "end";
+  before: ReviewSegment;
+  after: ReviewSegment;
+}
+
 export interface FrigateEvent {
   type: "new" | "update" | "end";
   before: FrigateObjectState;
   after: FrigateObjectState;
 }
+
+export type ToggleableSetting = "ON" | "OFF";

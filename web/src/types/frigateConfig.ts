@@ -1,10 +1,12 @@
+import { LivePlayerMode } from "./live";
+
 export interface UiConfig {
   timezone?: string;
   time_format?: "browser" | "12hour" | "24hour";
   date_style?: "full" | "long" | "medium" | "short";
   time_style?: "full" | "long" | "medium" | "short";
   strftime_fmt?: string;
-  live_mode?: string;
+  live_mode?: LivePlayerMode;
   use_experimental?: boolean;
   dashboard: boolean;
   order: number;
@@ -18,6 +20,14 @@ export interface BirdseyeConfig {
   restream: boolean;
   width: number;
 }
+
+export const ATTRIBUTE_LABELS = [
+  "amazon",
+  "face",
+  "fedex",
+  "license_plate",
+  "ups",
+];
 
 export interface CameraConfig {
   audio: {
@@ -104,7 +114,7 @@ export interface CameraConfig {
   objects: {
     filters: {
       [objectName: string]: {
-        mask: string | null;
+        mask: string[] | null;
         max_area: number;
         max_ratio: number;
         min_area: number;
@@ -161,6 +171,14 @@ export interface CameraConfig {
     };
     sync_recordings: boolean;
   };
+  review: {
+    alerts: {
+      required_zones: string[];
+    };
+    detections: {
+      required_zones: string[];
+    };
+  };
   rtmp: {
     enabled: boolean;
   };
@@ -197,10 +215,20 @@ export interface CameraConfig {
       coordinates: string;
       filters: Record<string, unknown>;
       inertia: number;
-      objects: any[];
+      loitering_time: number;
+      objects: string[];
+      color: number[];
     };
   };
 }
+
+export const GROUP_ICONS = ["car", "cat", "dog", "leaf"] as const;
+
+export type CameraGroupConfig = {
+  cameras: string[];
+  icon: (typeof GROUP_ICONS)[number];
+  order: number;
+};
 
 export interface FrigateConfig {
   audio: {
@@ -274,6 +302,8 @@ export interface FrigateConfig {
 
   go2rtc: Record<string, unknown>;
 
+  camera_groups: { [groupName: string]: CameraGroupConfig };
+
   live: {
     height: number;
     quality: number;
@@ -315,7 +345,7 @@ export interface FrigateConfig {
   objects: {
     filters: {
       [objectName: string]: {
-        mask: string | null;
+        mask: string[] | null;
         max_area: number;
         max_ratio: number;
         min_area: number;
@@ -324,7 +354,7 @@ export interface FrigateConfig {
         threshold: number;
       };
     };
-    mask: string;
+    mask: string[];
     track: string[];
   };
 
@@ -381,7 +411,7 @@ export interface FrigateConfig {
   };
 
   telemetry: {
-    network_interfaces: any[];
+    network_interfaces: string[];
     stats: {
       amd_gpu_stats: boolean;
       intel_gpu_stats: boolean;

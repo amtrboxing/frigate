@@ -1,5 +1,13 @@
-type DynamicPlayback = {
+import { Preview } from "./preview";
+import { Recording } from "./record";
+import { TimeRange } from "./timeline";
+
+export type DynamicPlayback = {
   recordings: Recording[];
-  playbackUri: string;
+  timeRange: TimeRange;
+};
+
+export type PreviewPlayback = {
   preview: Preview | undefined;
+  timeRange: TimeRange;
 };

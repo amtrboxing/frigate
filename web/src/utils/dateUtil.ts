@@ -132,7 +132,7 @@ export const formatUnixTimestampToDateTime = (
     date_style?: "full" | "long" | "medium" | "short";
     time_style?: "full" | "long" | "medium" | "short";
     strftime_fmt?: string;
-  }
+  },
 ): string => {
   const { timezone, time_format, date_style, time_style, strftime_fmt } =
     config;
@@ -187,7 +187,7 @@ export const formatUnixTimestampToDateTime = (
 
       return `${date.toLocaleDateString(
         locale,
-        dateOptions
+        dateOptions,
       )} ${date.toLocaleTimeString(locale, timeOptions)}`;
     }
 
@@ -196,12 +196,6 @@ export const formatUnixTimestampToDateTime = (
     return "Invalid time";
   }
 };
-
-interface DurationToken {
-  xSeconds: string;
-  xMinutes: string;
-  xHours: string;
-}
 
 /**
  * This function takes in start and end time in unix timestamp,
@@ -213,7 +207,7 @@ interface DurationToken {
  */
 export const getDurationFromTimestamps = (
   start_time: number,
-  end_time: number | null
+  end_time: number | null,
 ): string => {
   if (isNaN(start_time)) {
     return "Invalid start time";
@@ -225,19 +219,12 @@ export const getDurationFromTimestamps = (
     }
     const start = fromUnixTime(start_time);
     const end = fromUnixTime(end_time);
-    const formatDistanceLocale: DurationToken = {
-      xSeconds: "{{count}}s",
-      xMinutes: "{{count}}m",
-      xHours: "{{count}}h",
-    };
-    const shortEnLocale = {
-      formatDistance: (token: keyof DurationToken, count: number) =>
-        formatDistanceLocale[token].replace("{{count}}", count.toString()),
-    };
     duration = formatDuration(intervalToDuration({ start, end }), {
       format: ["hours", "minutes", "seconds"],
-      locale: shortEnLocale,
-    });
+    })
+      .replace("hours", "h")
+      .replace("minutes", "m")
+      .replace("seconds", "s");
   }
   return duration;
 };
@@ -248,7 +235,7 @@ export const getDurationFromTimestamps = (
  * @param timezone string representation of the timezone the user is requesting
  * @returns number of minutes offset from UTC
  */
-const getUTCOffset = (date: Date, timezone: string): number => {
+export const getUTCOffset = (date: Date, timezone: string): number => {
   // If timezone is in UTC±HH:MM format, parse it to get offset
   const utcOffsetMatch = timezone.match(/^UTC([+-])(\d{2}):(\d{2})$/);
   if (utcOffsetMatch) {
@@ -258,9 +245,7 @@ const getUTCOffset = (date: Date, timezone: string): number => {
   }
 
   // Otherwise, calculate offset using provided timezone
-  const utcDate = new Date(
-    date.getTime() - date.getTimezoneOffset() * 60 * 1000
-  );
+  const utcDate = new Date(date.getTime());
   // locale of en-CA is required for proper locale format
   let iso = utcDate
     .toLocaleString("en-CA", { timeZone: timezone, hour12: false })
@@ -274,7 +259,11 @@ const getUTCOffset = (date: Date, timezone: string): number => {
     target = new Date(`${iso}+000`);
   }
 
-  return (target.getTime() - utcDate.getTime()) / 60 / 1000;
+  return (
+    (target.getTime() - utcDate.getTime() - date.getTimezoneOffset()) /
+    60 /
+    1000
+  );
 };
 
 export function getRangeForTimestamp(timestamp: number) {
@@ -284,8 +273,18 @@ export function getRangeForTimestamp(timestamp: number) {
   date.setHours(date.getHours() + 1);
 
   // ensure not to go past current time
-  const end = Math.min(new Date().getTime() / 1000, date.getTime() / 1000);
-  return { start, end };
+  return { start, end: endOfHourOrCurrentTime(date.getTime() / 1000) };
+}
+
+export function endOfHourOrCurrentTime(timestamp: number) {
+  const now = new Date();
+  now.setMilliseconds(0);
+  return Math.min(timestamp, now.getTime() / 1000);
+}
+
+export function getEndOfDayTimestamp(date: Date) {
+  date.setHours(23, 59, 59, 999);
+  return date.getTime() / 1000;
 }
 
 export function isCurrentHour(timestamp: number) {

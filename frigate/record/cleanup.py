@@ -3,13 +3,16 @@
 import datetime
 import itertools
 import logging
+import os
 import threading
 from multiprocessing.synchronize import Event as MpEvent
 from pathlib import Path
 
+from playhouse.sqlite_ext import SqliteExtDatabase
+
 from frigate.config import CameraConfig, FrigateConfig, RetainModeEnum
-from frigate.const import CACHE_DIR, RECORD_DIR
-from frigate.models import Event, Previews, Recordings
+from frigate.const import CACHE_DIR, MAX_WAL_SIZE, RECORD_DIR
+from frigate.models import Event, Previews, Recordings, ReviewSegment
 from frigate.record.util import remove_empty_directories, sync_recordings
 from frigate.util.builtin import clear_and_unlink, get_tomorrow_at_time
 
@@ -32,6 +35,23 @@ class RecordingCleanup(threading.Thread):
             if p.stat().st_mtime < (datetime.datetime.now().timestamp() - 60 * 1):
                 logger.debug("Deleting tmp clip.")
                 clear_and_unlink(p)
+
+    def truncate_wal(self) -> None:
+        """check if the WAL needs to be manually truncated."""
+
+        # by default the WAL should be check-pointed automatically
+        # however, high levels of activity can prevent an opportunity
+        # for the checkpoint to be finished which means the WAL will grow
+        # without bound
+
+        # with auto checkpoint most users should never hit this
+
+        if (
+            os.stat(f"{self.config.database.path}-wal").st_size / (1024 * 1024)
+        ) > MAX_WAL_SIZE:
+            db = SqliteExtDatabase(self.config.database.path)
+            db.execute_sql("PRAGMA wal_checkpoint(TRUNCATE);")
+            db.close()
 
     def expire_existing_camera_recordings(
         self, expire_date: float, config: CameraConfig, events: Event
@@ -174,6 +194,65 @@ class RecordingCleanup(threading.Thread):
                 Previews.id << deleted_previews_list[i : i + max_deletes]
             ).execute()
 
+        review_segments: list[ReviewSegment] = (
+            ReviewSegment.select(
+                ReviewSegment.id,
+                ReviewSegment.start_time,
+                ReviewSegment.end_time,
+                ReviewSegment.thumb_path,
+            )
+            .where(
+                ReviewSegment.camera == config.name,
+                ReviewSegment.end_time < expire_date,
+            )
+            .order_by(ReviewSegment.start_time)
+            .namedtuples()
+            .iterator()
+        )
+
+        # expire review segments
+        recording_start = 0
+        deleted_segments = set()
+        for segment in review_segments:
+            keep = False
+            # look for a reason to keep this segment
+            for idx in range(recording_start, len(kept_recordings)):
+                start_time, end_time = kept_recordings[idx]
+
+                # if the recording starts in the future, stop checking recordings
+                # and let this segment expire
+                if start_time > segment.end_time:
+                    keep = False
+                    break
+
+                # if the recording ends after the segment starts, keep it
+                # and stop looking at recordings
+                if end_time >= segment.start_time:
+                    keep = True
+                    break
+
+                # if the recording ends before this segment starts, skip
+                # this recording and check the next recording for an overlap.
+                # since the kept recordings and segments are sorted, we can skip recordings
+                # that end before the current segment started
+                if end_time < segment.start_time:
+                    recording_start = idx
+
+            # Delete segments without any relevant recordings
+            if not keep:
+                Path(segment.thumb_path).unlink(missing_ok=True)
+                deleted_segments.add(segment.id)
+
+        # expire segments
+        logger.debug(f"Expiring {len(deleted_segments)} segments")
+        # delete up to 100,000 at a time
+        max_deletes = 100000
+        deleted_segments_list = list(deleted_segments)
+        for i in range(0, len(deleted_segments_list), max_deletes):
+            ReviewSegment.delete().where(
+                ReviewSegment.id << deleted_segments_list[i : i + max_deletes]
+            ).execute()
+
     def expire_recordings(self) -> None:
         """Delete recordings based on retention config."""
         logger.debug("Start expire recordings.")
@@ -269,3 +348,4 @@ class RecordingCleanup(threading.Thread):
             if counter == 0:
                 self.expire_recordings()
                 remove_empty_directories(RECORD_DIR)
+                self.truncate_wal()
